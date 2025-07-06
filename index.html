@@ -4,27 +4,38 @@
   <meta charset="UTF-8" />
   <title>Gods Fighting Game</title>
   <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: black;
+    }
     canvas {
-      background: #000;
       display: block;
-      margin: 0 auto;
-      border: 2px solid white;
     }
   </style>
 </head>
 <body>
-  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  <canvas id="gameCanvas"></canvas>
 
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
+
+    // Handle full screen
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
 
     const player = {
       x: 100,
       y: 300,
       radius: 15,
       color: "blue",
-      speed: 4
+      speed: 8
     };
 
     const ai = {
@@ -32,11 +43,10 @@
       y: 300,
       radius: 15,
       color: "red",
-      speed: 2
+      speed: 4
     };
 
     const keys = {};
-
     document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
     document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
@@ -55,8 +65,7 @@
       const dx = player.x - ai.x;
       const dy = player.y - ai.y;
       const dist = Math.hypot(dx, dy);
-      
-      // Follow the player
+
       if (dist > 1) {
         ai.x += (dx / dist) * ai.speed;
         ai.y += (dy / dist) * ai.speed;
