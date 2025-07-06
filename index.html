@@ -1,97 +1,188 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Gods Fighting Game</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: black;
+<script>
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resizeCanvas);
+  resizeCanvas();
+
+  const player = {
+    x: 100, y: 300, radius: 15, color: "blue", speed: 8,
+    dx: 0, dy: 0,
+    isDashing: false,
+    dashCooldown: 0,
+    invincible: false
+  };
+
+  const ai = {
+    x: 700, y: 300, radius: 15, color: "red", speed: 4,
+    dx: 0, dy: 0,
+    isDashing: false,
+    dashCooldown: 0,
+    invincible: false
+  };
+
+  const keys = {};
+  const projectiles = [];
+
+  document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+  document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+  // Mouse-based shooting
+  canvas.addEventListener("click", e => {
+    const angle = Math.atan2(e.clientY - player.y, e.clientX - player.x);
+    projectiles.push({
+      x: player.x,
+      y: player.y,
+      angle,
+      speed: 12,
+      color: "cyan",
+      owner: "player"
+    });
+  });
+
+  function shootAI() {
+    const dx = player.x - ai.x;
+    const dy = player.y - ai.y;
+    const angle = Math.atan2(dy, dx) + (Math.random() * 0.4 - 0.2); // Slight randomness
+    projectiles.push({
+      x: ai.x,
+      y: ai.y,
+      angle,
+      speed: 10,
+      color: "orange",
+      owner: "ai"
+    });
+  }
+
+  setInterval(shootAI, 1200); // AI fires every ~1.2 seconds
+
+  function movePlayer() {
+    player.dx = 0;
+    player.dy = 0;
+    if (keys["w"]) player.dy = -1;
+    if (keys["s"]) player.dy = 1;
+    if (keys["a"]) player.dx = -1;
+    if (keys["d"]) player.dx = 1;
+
+    const mag = Math.hypot(player.dx, player.dy);
+    if (mag !== 0) {
+      player.dx /= mag;
+      player.dy /= mag;
     }
-    canvas {
-      display: block;
-    }
-  </style>
-</head>
-<body>
-  <canvas id="gameCanvas"></canvas>
 
-  <script>
-    const canvas = document.getElementById("gameCanvas");
-    const ctx = canvas.getContext("2d");
-
-    // Handle full screen
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
-
-    const player = {
-      x: 100,
-      y: 300,
-      radius: 15,
-      color: "blue",
-      speed: 8
-    };
-
-    const ai = {
-      x: 700,
-      y: 300,
-      radius: 15,
-      color: "red",
-      speed: 4
-    };
-
-    const keys = {};
-    document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-    document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
-
-    function movePlayer() {
-      if (keys["w"]) player.y -= player.speed;
-      if (keys["s"]) player.y += player.speed;
-      if (keys["a"]) player.x -= player.speed;
-      if (keys["d"]) player.x += player.speed;
-
-      // Boundaries
-      player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
-      player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+    if (keys["f"] && player.dashCooldown <= 0) {
+      dash(player);
     }
 
-    function moveAI() {
-      const dx = player.x - ai.x;
-      const dy = player.y - ai.y;
-      const dist = Math.hypot(dx, dy);
+    if (!player.isDashing) {
+      player.x += player.dx * player.speed;
+      player.y += player.dy * player.speed;
+    }
+  }
 
-      if (dist > 1) {
-        ai.x += (dx / dist) * ai.speed;
-        ai.y += (dy / dist) * ai.speed;
+  function moveAI() {
+    const dx = player.x - ai.x;
+    const dy = player.y - ai.y;
+    const dist = Math.hypot(dx, dy);
+
+    ai.dx = dx / dist;
+    ai.dy = dy / dist;
+
+    if (!ai.isDashing) {
+      ai.x += ai.dx * ai.speed;
+      ai.y += ai.dy * ai.speed;
+    }
+
+    // AI randomly dashes
+    if (Math.random() < 0.01 && ai.dashCooldown <= 0) {
+      dash(ai);
+    }
+  }
+
+  function dash(entity) {
+    entity.isDashing = true;
+    entity.invincible = true;
+    entity.dashCooldown = 60;
+
+    const dashDistance = 100;
+    entity.x += entity.dx * dashDistance;
+    entity.y += entity.dy * dashDistance;
+
+    setTimeout(() => {
+      entity.isDashing = false;
+      entity.invincible = false;
+    }, 100); // 100ms dash
+  }
+
+  function updateProjectiles() {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const p = projectiles[i];
+      p.x += Math.cos(p.angle) * p.speed;
+      p.y += Math.sin(p.angle) * p.speed;
+
+      // Remove if off screen
+      if (
+        p.x < 0 || p.x > canvas.width ||
+        p.y < 0 || p.y > canvas.height
+      ) {
+        projectiles.splice(i, 1);
       }
     }
+  }
 
-    function drawCircle({ x, y, radius, color }) {
+  function drawCircle({ x, y, radius, color }) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+
+  function drawProjectiles() {
+    projectiles.forEach(p => {
       ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
       ctx.fill();
+    });
+  }
+
+  function drawInvincibilityOutline(entity) {
+    if (entity.invincible) {
+      ctx.beginPath();
+      ctx.arc(entity.x, entity.y, entity.radius + 4, 0, Math.PI * 2);
+      ctx.strokeStyle = "white";
+      ctx.lineWidth = 2;
+      ctx.stroke();
     }
+  }
 
-    function gameLoop() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+  function updateDashCooldowns() {
+    if (player.dashCooldown > 0) player.dashCooldown--;
+    if (ai.dashCooldown > 0) ai.dashCooldown--;
+  }
 
-      movePlayer();
-      moveAI();
+  function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      drawCircle(player);
-      drawCircle(ai);
+    updateDashCooldowns();
+    movePlayer();
+    moveAI();
+    updateProjectiles();
 
-      requestAnimationFrame(gameLoop);
-    }
+    drawCircle(player);
+    drawInvincibilityOutline(player);
 
-    gameLoop();
-  </script>
-</body>
-</html> 
+    drawCircle(ai);
+    drawInvincibilityOutline(ai);
+
+    drawProjectiles();
+
+    requestAnimationFrame(gameLoop);
+  }
+
+  gameLoop();
+</script>
