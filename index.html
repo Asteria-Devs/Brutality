@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Gods Fighting Game</title>
+  <style>
+    canvas {
+      background: #000;
+      display: block;
+      margin: 0 auto;
+      border: 2px solid white;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const player = {
+      x: 100,
+      y: 300,
+      radius: 15,
+      color: "blue",
+      speed: 4
+    };
+
+    const ai = {
+      x: 700,
+      y: 300,
+      radius: 15,
+      color: "red",
+      speed: 2
+    };
+
+    const keys = {};
+
+    document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    function movePlayer() {
+      if (keys["w"]) player.y -= player.speed;
+      if (keys["s"]) player.y += player.speed;
+      if (keys["a"]) player.x -= player.speed;
+      if (keys["d"]) player.x += player.speed;
+
+      // Boundaries
+      player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+      player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+    }
+
+    function moveAI() {
+      const dx = player.x - ai.x;
+      const dy = player.y - ai.y;
+      const dist = Math.hypot(dx, dy);
+      
+      // Follow the player
+      if (dist > 1) {
+        ai.x += (dx / dist) * ai.speed;
+        ai.y += (dy / dist) * ai.speed;
+      }
+    }
+
+    function drawCircle({ x, y, radius, color }) {
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      movePlayer();
+      moveAI();
+
+      drawCircle(player);
+      drawCircle(ai);
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
