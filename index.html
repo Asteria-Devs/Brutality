@@ -1,23 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Gods Fighting Game</title>
+  <meta charset="UTF-8" />
+  <title>Gods Fighting Game with AI Playstyles</title>
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
+      margin: 0; padding: 0; overflow: hidden;
       background: black;
+      user-select: none;
     }
     canvas {
       display: block;
+      background: #000;
     }
   </style>
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
-
   <script>
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
@@ -29,28 +28,36 @@
     window.addEventListener("resize", resizeCanvas);
     resizeCanvas();
 
-    const player = {
-      x: 100, y: 300, radius: 15, color: "blue", speed: 8,
-      dx: 0, dy: 0,
-      isDashing: false,
-      dashCooldown: 0,
-      invincible: false
-    };
+    function createGod(x, y, color) {
+      return {
+        x, y,
+        radius: 15,
+        color,
+        dx: 0, dy: 0,
+        speed: 6,
+        dashSpeed: 20,
+        dashFramesRemaining: 0,
+        dashCooldown: 0,
+        invincible: false,
+        hp: 100,
+        beamCooldown: 0,
+        projectileCooldown: 0,
+        playstyle: null,
+        playstyleDuration: 0
+      };
+    }
 
-    const ai = {
-      x: 700, y: 300, radius: 15, color: "red", speed: 4,
-      dx: 0, dy: 0,
-      isDashing: false,
-      dashCooldown: 0,
-      invincible: false
-    };
+    const player = createGod(100, 300, "blue");
+    const ai = createGod(canvas.width - 100, canvas.height / 2, "red");
 
     const keys = {};
     const projectiles = [];
+    const beams = [];
 
     document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
     document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
+    // Left click shoot projectile
     canvas.addEventListener("click", e => {
       const angle = Math.atan2(e.clientY - player.y, e.clientX - player.x);
       projectiles.push({
@@ -63,10 +70,54 @@
       });
     });
 
-    function shootAI() {
+    // Right click shoot beam
+    canvas.addEventListener("contextmenu", e => {
+      e.preventDefault();
+      const angle = Math.atan2(e.clientY - player.y, e.clientX - player.x);
+      beams.push({
+        x: player.x,
+        y: player.y,
+        angle,
+        length: 1000,
+        width: 4,
+        color: "cyan",
+        duration: 15,
+        owner: "player"
+      });
+    });
+
+    const AI_PLAYSTYLES = {
+      DEFENSIVE: "defensive",
+      AGGRESSIVE: "aggressive"
+    };
+    ai.playstyle = AI_PLAYSTYLES.DEFENSIVE;
+    ai.playstyleDuration = 0;
+
+    // --- AI Playstyle switcher ---
+    function updateAIPlaystyle() {
+      if (ai.playstyleDuration <= 0) {
+        const choices = [AI_PLAYSTYLES.DEFENSIVE, AI_PLAYSTYLES.AGGRESSIVE];
+        ai.playstyle = choices[Math.floor(Math.random() * choices.length)];
+        ai.playstyleDuration = 180 + Math.floor(Math.random() * 240); // 3-7 sec
+      } else {
+        ai.playstyleDuration--;
+      }
+    }
+
+    function startDash(entity, dx, dy) {
+      const mag = Math.hypot(dx, dy);
+      if (mag === 0) return;
+      entity.dx = dx / mag;
+      entity.dy = dy / mag;
+      entity.invincible = true;
+      entity.dashFramesRemaining = 5;
+      entity.dashCooldown = 60;
+    }
+
+    function shootAIProjectile() {
       const dx = player.x - ai.x;
       const dy = player.y - ai.y;
-      const angle = Math.atan2(dy, dx) + (Math.random() * 0.4 - 0.2); // Random aim offset
+      const angle = Math.atan2(dy, dx) + (Math.random() * 0.4 - 0.2);
       projectiles.push({
         x: ai.x,
         y: ai.y,
@@ -77,63 +128,124 @@
       });
     }
 
-    setInterval(shootAI, 1200); // AI fires every 1.2s
-
-    function movePlayer() {
-      player.dx = 0;
-      player.dy = 0;
-      if (keys["w"]) player.dy = -1;
-      if (keys["s"]) player.dy = 1;
-      if (keys["a"]) player.dx = -1;
-      if (keys["d"]) player.dx = 1;
-
-      const mag = Math.hypot(player.dx, player.dy);
-      if (mag !== 0) {
-        player.dx /= mag;
-        player.dy /= mag;
-      }
-
-      if (keys["f"] && player.dashCooldown <= 0) {
-        dash(player);
-      }
-
-      if (!player.isDashing) {
-        player.x += player.dx * player.speed;
-        player.y += player.dy * player.speed;
-      }
+    function shootAIBeam() {
+      const angleToPlayer = Math.atan2(player.y - ai.y, player.x - ai.x);
+      const inaccurateAngle = angleToPlayer + (Math.random() * 0.6 - 0.3); // ±~17°
+      beams.push({
+        x: ai.x,
+        y: ai.y,
+        angle: inaccurateAngle,
+        length: 1000,
+        width: 5,
+        color: "orange",
+        duration: 20,
+        owner: "ai"
+      });
     }
 
     function moveAI() {
-      const dx = player.x - ai.x;
-      const dy = player.y - ai.y;
-      const dist = Math.hypot(dx, dy);
+      updateAIPlaystyle();
 
-      ai.dx = dx / dist;
-      ai.dy = dy / dist;
+      if (ai.beamCooldown > 0) ai.beamCooldown--;
+      if (ai.projectileCooldown > 0) ai.projectileCooldown--;
+      if (ai.dashCooldown > 0) ai.dashCooldown--;
 
-      if (!ai.isDashing) {
-        ai.x += ai.dx * ai.speed;
-        ai.y += ai.dy * ai.speed;
+      let dx = 0, dy = 0;
+      const diffX = player.x - ai.x;
+      const diffY = player.y - ai.y;
+      const dist = Math.hypot(diffX, diffY);
+
+      if (ai.playstyle === AI_PLAYSTYLES.DEFENSIVE) {
+        // Keep distance > 300, dash away randomly
+        if (dist < 300) {
+          dx = -diffX / dist;
+          dy = -diffY / dist;
+          if (Math.random() < 0.015 && ai.dashCooldown <= 0) {
+            startDash(ai, dx, dy);
+          }
+        } else {
+          dx = (Math.random() - 0.5) * 0.5;
+          dy = (Math.random() - 0.5) * 0.5;
+        }
+
+        if (ai.projectileCooldown <= 0 && Math.random() < 0.04) {
+          shootAIProjectile();
+          ai.projectileCooldown = 90;
+        }
+        if (ai.beamCooldown <= 0 && Math.random() < 0.01) {
+          shootAIBeam();
+          ai.beamCooldown = 300;
+        }
+      } else if (ai.playstyle === AI_PLAYSTYLES.AGGRESSIVE) {
+        dx = diffX / dist;
+        dy = diffY / dist;
+
+        if (Math.random() < 0.02 && ai.dashCooldown <= 0) {
+          startDash(ai, dx, dy);
+        }
+        if (ai.projectileCooldown <= 0 && Math.random() < 0.15) {
+          shootAIProjectile();
+          ai.projectileCooldown = 50;
+        }
+        if (ai.beamCooldown <= 0 && Math.random() < 0.05) {
+          shootAIBeam();
+          ai.beamCooldown = 150;
+        }
       }
 
-      if (Math.random() < 0.01 && ai.dashCooldown <= 0) {
-        dash(ai);
+      const mag = Math.hypot(dx, dy);
+      if (mag !== 0) {
+        ai.dx = dx / mag;
+        ai.dy = dy / mag;
+      } else {
+        ai.dx = 0;
+        ai.dy = 0;
+      }
+
+      const speed = ai.dashFramesRemaining > 0 ? ai.dashSpeed : ai.speed;
+      ai.x += ai.dx * speed;
+      ai.y += ai.dy * speed;
+
+      if (ai.dashFramesRemaining > 0) {
+        ai.dashFramesRemaining--;
+        if (ai.dashFramesRemaining === 0) {
+          ai.invincible = false;
+        }
       }
     }
 
-    function dash(entity) {
-      entity.isDashing = true;
-      entity.invincible = true;
-      entity.dashCooldown = 60;
+    function movePlayer() {
+      let dx = 0, dy = 0;
 
-      const dashDistance = 100;
-      entity.x += entity.dx * dashDistance;
-      entity.y += entity.dy * dashDistance;
+      if (keys["w"]) dy = -1;
+      if (keys["s"]) dy = 1;
+      if (keys["a"]) dx = -1;
+      if (keys["d"]) dx = 1;
 
-      setTimeout(() => {
-        entity.isDashing = false;
-        entity.invincible = false;
-      }, 100);
+      if (keys["f"] && player.dashCooldown <= 0) {
+        startDash(player, dx, dy);
+      }
+
+      const mag = Math.hypot(dx, dy);
+      if (mag !== 0) {
+        player.dx = dx / mag;
+        player.dy = dy / mag;
+      }
+
+      const speed = player.dashFramesRemaining > 0 ? player.dashSpeed : player.speed;
+      player.x += player.dx * speed;
+      player.y += player.dy * speed;
+
+      if (player.dashFramesRemaining > 0) {
+        player.dashFramesRemaining--;
+        if (player.dashFramesRemaining === 0) {
+          player.invincible = false;
+        }
+      }
+
+      if (player.dashCooldown > 0) {
+        player.dashCooldown--;
+      }
     }
 
     function updateProjectiles() {
@@ -147,58 +259,166 @@
           p.y < 0 || p.y > canvas.height
         ) {
           projectiles.splice(i, 1);
+          continue;
+        }
+
+        const target = p.owner === "player" ? ai : player;
+        if (!target.invincible && isColliding(p, target)) {
+          target.hp -= 10;
+          projectiles.splice(i, 1);
         }
       }
     }
 
-    function drawCircle({ x, y, radius, color }) {
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
+    function updateBeams() {
+      for (let i = beams.length - 1; i >= 0; i--) {
+        const beam = beams[i];
+        const target = beam.owner === "player" ? ai : player;
+        if (!target.invincible && checkBeamCollision(beam, target)) {
+          target.hp -= 0.5; // damage per frame beam is active
+        }
+
+        beam.duration--;
+        if (beam.duration <= 0) {
+          beams.splice(i, 1);
+        }
+      }
     }
 
-    function drawInvincibilityOutline(entity) {
-      if (entity.invincible) {
-        ctx.beginPath();
-        ctx.arc(entity.x, entity.y, entity.radius + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+    function isColliding(projectile, god) {
+      const dist = Math.hypot(projectile.x - god.x, projectile.y - god.y);
+      return dist < god.radius;
+    }
+
+    // Check if point is near the line segment for beam hit
+    function checkBeamCollision(beam, god) {
+      // Beam line: from (beam.x, beam.y) to (beam.x + cos(angle)*length, beam.y + sin(angle)*length)
+      const bx1 = beam.x;
+      const by1 = beam.y;
+      const bx2 = beam.x + Math.cos(beam.angle) * beam.length;
+      const by2 = beam.y + Math.sin(beam.angle) * beam.length;
+
+      // Distance from circle center to line segment
+      const dist = pointLineDistance(god.x, god.y, bx1, by1, bx2, by2);
+      return dist < god.radius;
+    }
+
+    function pointLineDistance(px, py, x1, y1, x2, y2) {
+      const A = px - x1;
+      const B = py - y1;
+      const C = x2 - x1;
+      const D = y2 - y1;
+
+      const dot = A * C + B * D;
+      const len_sq = C * C + D * D;
+      let param = -1;
+      if (len_sq !== 0) param = dot / len_sq;
+
+      let xx, yy;
+      if (param < 0) {
+        xx = x1;
+        yy = y1;
+      } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+      } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
       }
+
+      const dx = px - xx;
+      const dy = py - yy;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    function drawGod(god) {
+      ctx.beginPath();
+      ctx.fillStyle = god.invincible ? "white" : god.color;
+      ctx.shadowColor = god.color;
+      ctx.shadowBlur = 15;
+      ctx.arc(god.x, god.y, god.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      // Draw HP bar
+      const barWidth = 60;
+      const barHeight = 8;
+      const x = god.x - barWidth / 2;
+      const y = god.y + god.radius + 10;
+
+      ctx.fillStyle = "gray";
+      ctx.fillRect(x, y, barWidth, barHeight);
+      ctx.fillStyle = god.color;
+      ctx.fillRect(x, y, barWidth * (god.hp / 100), barHeight);
+      ctx.strokeStyle = "white";
+      ctx.strokeRect(x, y, barWidth, barHeight);
     }
 
     function drawProjectiles() {
       projectiles.forEach(p => {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
         ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 10;
+        ctx.arc(p.x, p.y, 6, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
       });
     }
 
-    function updateDashCooldowns() {
-      if (player.dashCooldown > 0) player.dashCooldown--;
-      if (ai.dashCooldown > 0) ai.dashCooldown--;
+    function drawBeams() {
+      beams.forEach(beam => {
+        ctx.save();
+        ctx.strokeStyle = beam.color;
+        ctx.shadowColor = beam.color;
+        ctx.shadowBlur = 20;
+        ctx.lineWidth = beam.width;
+        ctx.beginPath();
+        ctx.moveTo(beam.x, beam.y);
+        ctx.lineTo(beam.x + Math.cos(beam.angle) * beam.length, beam.y + Math.sin(beam.angle) * beam.length);
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    function clampPosition(god) {
+      god.x = Math.min(Math.max(god.radius, god.x), canvas.width - god.radius);
+      god.y = Math.min(Math.max(god.radius, god.y), canvas.height - god.radius);
+    }
+
+    function gameOverCheck() {
+      if (player.hp <= 0 || ai.hp <= 0) {
+        ctx.fillStyle = "white";
+        ctx.font = "48px sans-serif";
+        ctx.textAlign = "center";
+        const winner = player.hp > 0 ? "Player Wins!" : "AI Wins!";
+        ctx.fillText(winner, canvas.width / 2, canvas.height / 2);
+        return true;
+      }
+      return false;
     }
 
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      updateDashCooldowns();
       movePlayer();
       moveAI();
+
+      clampPosition(player);
+      clampPosition(ai);
+
       updateProjectiles();
+      updateBeams();
 
-      drawCircle(player);
-      drawInvincibilityOutline(player);
-
-      drawCircle(ai);
-      drawInvincibilityOutline(ai);
-
+      drawBeams();
       drawProjectiles();
 
-      requestAnimationFrame(gameLoop);
+      drawGod(player);
+      drawGod(ai);
+
+      if (!gameOverCheck()) {
+        requestAnimationFrame(gameLoop);
+      }
     }
 
     gameLoop();
