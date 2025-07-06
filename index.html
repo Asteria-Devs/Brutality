@@ -263,102 +263,77 @@
           }
         }
 
-        for (const beam of beams) {
-          if (beam.owner === "player") {
-            const distToBeam = pointLineDistance(ai.x, ai.y, beam.x, beam.y, beam.x + Math.cos(beam.angle)*beam.length, beam.y + Math.sin(beam.angle)*beam.length);
-            if (distToBeam < ai.radius + 30) {
-              const bx = Math.cos(beam.angle);
-              const by = Math.sin(beam.angle);
-              dodgeVector.x += -by;
-              dodgeVector.y += bx;
-            }
-          }
-        }
-
-        if (threatCount > 0) {
+        if (threatCount > 0 && ai.dashCooldown <= 0) {
           const mag = Math.hypot(dodgeVector.x, dodgeVector.y);
           if (mag > 0) {
-            dodgeVector.x /= mag;
-            dodgeVector.y /= mag;
-          }
-          if (ai.dashCooldown <= 0) {
-            startDash(ai, dodgeVector.x, dodgeVector.y);
-          }
-          dx = dodgeVector.x;
-          dy = dodgeVector.y;
-        } else {
-          if (dist < 350) {
-            dx = -diffX / dist;
-            dy = -diffY / dist;
-          } else {
-            dx = (Math.random() - 0.5) * 0.3;
-            dy = (Math.random() - 0.5) * 0.3;
+            startDash(ai, dodgeVector.x / mag, dodgeVector.y / mag);
           }
         }
 
-        if (ai.projectileCooldown <= 0 && Math.random() < 0.06) {
-          shootAIProjectile();
-          ai.projectileCooldown = 70;
+        if (ai.dashFramesRemaining > 0) {
+          ai.x += ai.dx * ai.dashSpeed;
+          ai.y += ai.dy * ai.dashSpeed;
+          ai.dashFramesRemaining--;
+          if (ai.dashFramesRemaining === 0) ai.invincible = false;
+        } else {
+          if (threatCount === 0) {
+            // Move away from player a bit to keep distance
+            if (dist < 250) {
+              dx = -diffX / dist;
+              dy = -diffY / dist;
+            } else {
+              dx = 0; dy = 0;
+            }
+            ai.x += dx * ai.speed;
+            ai.y += dy * ai.speed;
+          }
         }
-        if (ai.beamCooldown <= 0 && Math.random() < 0.015) {
+
+        // Defensive shooting: less frequent, cautious
+        if (ai.projectileCooldown <= 0 && Math.random() < 0.02) {
+          shootAIProjectile();
+          ai.projectileCooldown = 100 + Math.random() * 100;
+        }
+        if (ai.beamCooldown <= 0 && Math.random() < 0.005) {
           shootAIBeam();
-          ai.beamCooldown = 250;
+          ai.beamCooldown = 180 + Math.random() * 120;
         }
       } else if (ai.playstyle === AI_PLAYSTYLES.AGGRESSIVE) {
-        const dxToPlayer = diffX / dist;
-        const dyToPlayer = diffY / dist;
-        dx = dxToPlayer;
-        dy = dyToPlayer;
-
-        if (Math.random() < 0.04 && ai.dashCooldown <= 0) {
-          startDash(ai, dx, dy);
-        }
-
-        if (dist > 60) {
-          dx = dxToPlayer;
-          dy = dyToPlayer;
+        // Aggressive: move towards player
+        if (ai.dashFramesRemaining > 0) {
+          ai.x += ai.dx * ai.dashSpeed;
+          ai.y += ai.dy * ai.dashSpeed;
+          ai.dashFramesRemaining--;
+          if (ai.dashFramesRemaining === 0) ai.invincible = false;
         } else {
-          dx = -dyToPlayer;
-          dy = dxToPlayer;
+          if (dist > 50) {
+            dx = diffX / dist;
+            dy = diffY / dist;
+            ai.x += dx * ai.speed;
+            ai.y += dy * ai.speed;
+          }
+
+          // Dash offensively sometimes
+          if (ai.dashCooldown <= 0 && Math.random() < 0.015) {
+            startDash(ai, dx, dy);
+          }
         }
 
-        if (ai.projectileCooldown <= 0 && Math.random() < 0.25) {
-          shootAIProjectile();
-          ai.projectileCooldown = 30;
+        // Aggressive shooting: more frequent, more accurate aiming
+        if (ai.projectileCooldown <= 0) {
+          shootAIProjectile(true);
+          ai.projectileCooldown = 50 + Math.random() * 50;
         }
-        if (ai.beamCooldown <= 0 && Math.random() < 0.07) {
-          shootAIBeam();
-          ai.beamCooldown = 120;
-        }
-      }
-
-      const mag = Math.hypot(dx, dy);
-      if (mag !== 0) {
-        ai.dx = dx / mag;
-        ai.dy = dy / mag;
-      } else {
-        ai.dx = 0;
-        ai.dy = 0;
-      }
-
-      const speed = ai.dashFramesRemaining > 0 ? ai.dashSpeed : ai.speed;
-      ai.x += ai.dx * speed;
-      ai.y += ai.dy * speed;
-
-      if (ai.dashFramesRemaining > 0) {
-        ai.dashFramesRemaining--;
-        if (ai.dashFramesRemaining === 0) {
-          ai.invincible = false;
+        if (ai.beamCooldown <= 0 && Math.random() < 0.02) {
+          shootAIBeam(true);
+          ai.beamCooldown = 120 + Math.random() * 80;
         }
       }
 
       clampPosition(ai);
     }
 
-    // Player shooting projectiles and beams
-    let playerBeamActive = false;
-    let playerBeam = null;
-
+    // Shooting functions
     function shootPlayerProjectile() {
       const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
       projectiles.push({
@@ -371,13 +346,13 @@
       });
     }
 
-    function shootAIProjectile() {
-      const diffX = player.x - ai.x;
-      const diffY = player.y - ai.y;
-      let angle = Math.atan2(diffY, diffX);
-      // Aggressive AI is more accurate, Defensive AI less accurate
-      const accuracyOffset = ai.playstyle === AI_PLAYSTYLES.AGGRESSIVE ? 0.1 : 0.4;
-      angle += (Math.random() * 2 - 1) * accuracyOffset;
+    function shootAIProjectile(accurate = false) {
+      let angle = Math.atan2(player.y - ai.y, player.x - ai.x);
+      if (!accurate) {
+        angle += (Math.random() - 0.5) * 0.7;
+      } else {
+        angle += (Math.random() - 0.5) * 0.15;
+      }
       projectiles.push({
         x: ai.x + Math.cos(angle) * ai.radius,
         y: ai.y + Math.sin(angle) * ai.radius,
@@ -388,61 +363,51 @@
       });
     }
 
-    function shootPlayerBeam() {
-      const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
-      beams.push({
-        x: player.x + Math.cos(angle) * player.radius,
-        y: player.y + Math.sin(angle) * player.radius,
-        angle,
-        length: BEAM_LENGTH,
-        width: BEAM_WIDTH,
-        color: "cyan",
-        owner: "player",
-        duration: 30, // frames
-      });
-    }
+    // Beam shooting
+    let playerBeamActive = false;
+    let playerBeam = null;
 
-    function shootAIBeam() {
-      const diffX = player.x - ai.x;
-      const diffY = player.y - ai.y;
-      let angle = Math.atan2(diffY, diffX);
-      const accuracyOffset = ai.playstyle === AI_PLAYSTYLES.AGGRESSIVE ? 0.1 : 0.4;
-      angle += (Math.random() * 2 - 1) * accuracyOffset;
-      beams.push({
-        x: ai.x + Math.cos(angle) * ai.radius,
-        y: ai.y + Math.sin(angle) * ai.radius,
+    function shootAIBeam(accurate = false) {
+      let angle = Math.atan2(player.y - ai.y, player.x - ai.x);
+      if (!accurate) {
+        angle += (Math.random() - 0.5) * 0.7;
+      } else {
+        angle += (Math.random() - 0.5) * 0.15;
+      }
+      const beam = {
+        x: ai.x,
+        y: ai.y,
         angle,
         length: BEAM_LENGTH,
         width: BEAM_WIDTH,
         color: "red",
         owner: "ai",
         duration: 30,
-      });
+      };
+      beams.push(beam);
     }
 
-    // Projectiles update and collision
+    // Update projectiles
     function updateProjectiles() {
       for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
         p.x += Math.cos(p.angle) * p.speed;
         p.y += Math.sin(p.angle) * p.speed;
 
-        // Remove if out of screen bounds
-        if (p.x < -50 || p.x > canvas.width + 50 || p.y < -50 || p.y > canvas.height + 50) {
+        if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
           projectiles.splice(i, 1);
           continue;
         }
 
-        // Check collision with opponent
         const target = (p.owner === "player") ? ai : player;
         if (!target.invincible && checkProjectileCollision(p, target)) {
-          target.hp -= 10;
+          target.hp -= 1;
           projectiles.splice(i, 1);
         }
       }
     }
 
-    // Beams update and collision
+    // Update beams and collision
     function updateBeams() {
       for (let i = beams.length - 1; i >= 0; i--) {
         const b = beams[i];
@@ -472,7 +437,7 @@
       ctx.arc(god.x, god.y, god.radius, 0, Math.PI * 2);
       ctx.fill();
 
-      // Draw HP bar
+      // Draw HP bar above god
       ctx.fillStyle = "grey";
       ctx.fillRect(god.x - 30, god.y - god.radius - 20, 60, 6);
       ctx.fillStyle = god.color;
@@ -511,10 +476,8 @@
     function loop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Player input & movement
       movePlayer();
 
-      // Player shooting
       if (mouse.left) {
         if (!player.lastShot || performance.now() - player.lastShot > 200) {
           shootPlayerProjectile();
@@ -546,38 +509,17 @@
         }
       }
 
-      // AI logic and movement
       moveAI();
 
-      // Update projectiles and beams
       updateProjectiles();
       updateBeams();
 
-      // Draw everything
       drawGod(player);
       drawGod(ai);
       drawProjectiles();
       drawBeams();
 
-      // Draw current AI playstyle
-      ctx.fillStyle = "white";
-      ctx.font = "18px Arial";
-      ctx.fillText("AI Playstyle: " + ai.playstyle.charAt(0).toUpperCase() + ai.playstyle.slice(1), 10, 25);
-
-      // Draw HP bars at top-left and top-right
-      ctx.fillStyle = "cyan";
-      ctx.fillRect(20, 40, 200 * (player.hp / 100), 20);
-      ctx.strokeStyle = "white";
-      ctx.strokeRect(20, 40, 200, 20);
-      ctx.fillStyle = "white";
-      ctx.fillText("Player HP", 20, 35);
-
-      ctx.fillStyle = "red";
-      ctx.fillRect(canvas.width - 220, 40, 200 * (ai.hp / 100), 20);
-      ctx.strokeStyle = "white";
-      ctx.strokeRect(canvas.width - 220, 40, 200, 20);
-      ctx.fillStyle = "white";
-      ctx.fillText("AI HP", canvas.width - 220, 35);
+      // Removed AI playstyle text and top HP bars
 
       // Check for game over
       if (player.hp <= 0 || ai.hp <= 0) {
