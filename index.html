@@ -1,188 +1,207 @@
-<script>
-  const canvas = document.getElementById("gameCanvas");
-  const ctx = canvas.getContext("2d");
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gods Fighting Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: black;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
 
-  function resizeCanvas() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  window.addEventListener("resize", resizeCanvas);
-  resizeCanvas();
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
 
-  const player = {
-    x: 100, y: 300, radius: 15, color: "blue", speed: 8,
-    dx: 0, dy: 0,
-    isDashing: false,
-    dashCooldown: 0,
-    invincible: false
-  };
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
 
-  const ai = {
-    x: 700, y: 300, radius: 15, color: "red", speed: 4,
-    dx: 0, dy: 0,
-    isDashing: false,
-    dashCooldown: 0,
-    invincible: false
-  };
+    const player = {
+      x: 100, y: 300, radius: 15, color: "blue", speed: 8,
+      dx: 0, dy: 0,
+      isDashing: false,
+      dashCooldown: 0,
+      invincible: false
+    };
 
-  const keys = {};
-  const projectiles = [];
+    const ai = {
+      x: 700, y: 300, radius: 15, color: "red", speed: 4,
+      dx: 0, dy: 0,
+      isDashing: false,
+      dashCooldown: 0,
+      invincible: false
+    };
 
-  document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-  document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+    const keys = {};
+    const projectiles = [];
 
-  // Mouse-based shooting
-  canvas.addEventListener("click", e => {
-    const angle = Math.atan2(e.clientY - player.y, e.clientX - player.x);
-    projectiles.push({
-      x: player.x,
-      y: player.y,
-      angle,
-      speed: 12,
-      color: "cyan",
-      owner: "player"
+    document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    canvas.addEventListener("click", e => {
+      const angle = Math.atan2(e.clientY - player.y, e.clientX - player.x);
+      projectiles.push({
+        x: player.x,
+        y: player.y,
+        angle,
+        speed: 12,
+        color: "cyan",
+        owner: "player"
+      });
     });
-  });
 
-  function shootAI() {
-    const dx = player.x - ai.x;
-    const dy = player.y - ai.y;
-    const angle = Math.atan2(dy, dx) + (Math.random() * 0.4 - 0.2); // Slight randomness
-    projectiles.push({
-      x: ai.x,
-      y: ai.y,
-      angle,
-      speed: 10,
-      color: "orange",
-      owner: "ai"
-    });
-  }
-
-  setInterval(shootAI, 1200); // AI fires every ~1.2 seconds
-
-  function movePlayer() {
-    player.dx = 0;
-    player.dy = 0;
-    if (keys["w"]) player.dy = -1;
-    if (keys["s"]) player.dy = 1;
-    if (keys["a"]) player.dx = -1;
-    if (keys["d"]) player.dx = 1;
-
-    const mag = Math.hypot(player.dx, player.dy);
-    if (mag !== 0) {
-      player.dx /= mag;
-      player.dy /= mag;
+    function shootAI() {
+      const dx = player.x - ai.x;
+      const dy = player.y - ai.y;
+      const angle = Math.atan2(dy, dx) + (Math.random() * 0.4 - 0.2); // Random aim offset
+      projectiles.push({
+        x: ai.x,
+        y: ai.y,
+        angle,
+        speed: 10,
+        color: "orange",
+        owner: "ai"
+      });
     }
 
-    if (keys["f"] && player.dashCooldown <= 0) {
-      dash(player);
-    }
+    setInterval(shootAI, 1200); // AI fires every 1.2s
 
-    if (!player.isDashing) {
-      player.x += player.dx * player.speed;
-      player.y += player.dy * player.speed;
-    }
-  }
+    function movePlayer() {
+      player.dx = 0;
+      player.dy = 0;
+      if (keys["w"]) player.dy = -1;
+      if (keys["s"]) player.dy = 1;
+      if (keys["a"]) player.dx = -1;
+      if (keys["d"]) player.dx = 1;
 
-  function moveAI() {
-    const dx = player.x - ai.x;
-    const dy = player.y - ai.y;
-    const dist = Math.hypot(dx, dy);
+      const mag = Math.hypot(player.dx, player.dy);
+      if (mag !== 0) {
+        player.dx /= mag;
+        player.dy /= mag;
+      }
 
-    ai.dx = dx / dist;
-    ai.dy = dy / dist;
+      if (keys["f"] && player.dashCooldown <= 0) {
+        dash(player);
+      }
 
-    if (!ai.isDashing) {
-      ai.x += ai.dx * ai.speed;
-      ai.y += ai.dy * ai.speed;
-    }
-
-    // AI randomly dashes
-    if (Math.random() < 0.01 && ai.dashCooldown <= 0) {
-      dash(ai);
-    }
-  }
-
-  function dash(entity) {
-    entity.isDashing = true;
-    entity.invincible = true;
-    entity.dashCooldown = 60;
-
-    const dashDistance = 100;
-    entity.x += entity.dx * dashDistance;
-    entity.y += entity.dy * dashDistance;
-
-    setTimeout(() => {
-      entity.isDashing = false;
-      entity.invincible = false;
-    }, 100); // 100ms dash
-  }
-
-  function updateProjectiles() {
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-      const p = projectiles[i];
-      p.x += Math.cos(p.angle) * p.speed;
-      p.y += Math.sin(p.angle) * p.speed;
-
-      // Remove if off screen
-      if (
-        p.x < 0 || p.x > canvas.width ||
-        p.y < 0 || p.y > canvas.height
-      ) {
-        projectiles.splice(i, 1);
+      if (!player.isDashing) {
+        player.x += player.dx * player.speed;
+        player.y += player.dy * player.speed;
       }
     }
-  }
 
-  function drawCircle({ x, y, radius, color }) {
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-  }
+    function moveAI() {
+      const dx = player.x - ai.x;
+      const dy = player.y - ai.y;
+      const dist = Math.hypot(dx, dy);
 
-  function drawProjectiles() {
-    projectiles.forEach(p => {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = p.color;
-      ctx.fill();
-    });
-  }
+      ai.dx = dx / dist;
+      ai.dy = dy / dist;
 
-  function drawInvincibilityOutline(entity) {
-    if (entity.invincible) {
-      ctx.beginPath();
-      ctx.arc(entity.x, entity.y, entity.radius + 4, 0, Math.PI * 2);
-      ctx.strokeStyle = "white";
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      if (!ai.isDashing) {
+        ai.x += ai.dx * ai.speed;
+        ai.y += ai.dy * ai.speed;
+      }
+
+      if (Math.random() < 0.01 && ai.dashCooldown <= 0) {
+        dash(ai);
+      }
     }
-  }
 
-  function updateDashCooldowns() {
-    if (player.dashCooldown > 0) player.dashCooldown--;
-    if (ai.dashCooldown > 0) ai.dashCooldown--;
-  }
+    function dash(entity) {
+      entity.isDashing = true;
+      entity.invincible = true;
+      entity.dashCooldown = 60;
 
-  function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const dashDistance = 100;
+      entity.x += entity.dx * dashDistance;
+      entity.y += entity.dy * dashDistance;
 
-    updateDashCooldowns();
-    movePlayer();
-    moveAI();
-    updateProjectiles();
+      setTimeout(() => {
+        entity.isDashing = false;
+        entity.invincible = false;
+      }, 100);
+    }
 
-    drawCircle(player);
-    drawInvincibilityOutline(player);
+    function updateProjectiles() {
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.x += Math.cos(p.angle) * p.speed;
+        p.y += Math.sin(p.angle) * p.speed;
 
-    drawCircle(ai);
-    drawInvincibilityOutline(ai);
+        if (
+          p.x < 0 || p.x > canvas.width ||
+          p.y < 0 || p.y > canvas.height
+        ) {
+          projectiles.splice(i, 1);
+        }
+      }
+    }
 
-    drawProjectiles();
+    function drawCircle({ x, y, radius, color }) {
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
 
-    requestAnimationFrame(gameLoop);
-  }
+    function drawInvincibilityOutline(entity) {
+      if (entity.invincible) {
+        ctx.beginPath();
+        ctx.arc(entity.x, entity.y, entity.radius + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
 
-  gameLoop();
-</script>
+    function drawProjectiles() {
+      projectiles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.fill();
+      });
+    }
+
+    function updateDashCooldowns() {
+      if (player.dashCooldown > 0) player.dashCooldown--;
+      if (ai.dashCooldown > 0) ai.dashCooldown--;
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      updateDashCooldowns();
+      movePlayer();
+      moveAI();
+      updateProjectiles();
+
+      drawCircle(player);
+      drawInvincibilityOutline(player);
+
+      drawCircle(ai);
+      drawInvincibilityOutline(ai);
+
+      drawProjectiles();
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
